@@ -15,9 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('first_name')->nullable();
             $table->string('last_name')->nullable();
-            $table->string('timezone')->default('UTC');
             $table->string('email')->unique();
             $table->string('phone')->nullable();
+            $table->string('reminder_preference')->default('email');
+            $table->string('timezone')->default('UTC');
             $table->timestamps();
         });
     }
