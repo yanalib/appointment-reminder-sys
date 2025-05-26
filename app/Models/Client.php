@@ -18,18 +18,13 @@ class Client extends Model
         'reminder_preference'
     ];
 
-    /**
-     * Get all appointments for the client
-     */
+
     public function appointments()
     {
         return $this->belongsToMany(Appointment::class, 'clients_appointments')
             ->withTimestamps();
     }
 
-    /**
-     * Get all reminders for the client
-     */
     public function reminders()
     {
         return $this->hasMany(ReminderDespatch::class);

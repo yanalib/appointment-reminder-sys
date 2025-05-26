@@ -34,18 +34,13 @@ class Appointment extends Model
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get all clients for the appointment
-     */
+
     public function clients()
     {
         return $this->belongsToMany(Client::class, 'clients_appointments')
             ->withTimestamps();
     }
 
-    /**
-     * Get all reminders for the appointment
-     */
     public function reminders()
     {
         return $this->hasMany(ReminderDespatch::class);
