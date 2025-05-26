@@ -24,10 +24,12 @@ class Client extends Model
     public function appointments()
     {
         return $this->belongsToMany(Appointment::class, 'clients_appointments')
-            ->withPivot('status', 'notes')
             ->withTimestamps();
     }
 
+    /**
+     * Get all reminders for the client
+     */
     public function reminders()
     {
         return $this->hasMany(ReminderDespatch::class);

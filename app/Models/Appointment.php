@@ -12,23 +12,21 @@ class Appointment extends Model
     protected $fillable = [
         'title',
         'description',
-        'appointment_date',
-        'start_time',
-        'end_time',
-        'user_id',
         'notes',
-        'status',
+        'start_datetime',
+        'end_datetime',
+        'user_id',
         'is_recurring',
         'recurrence_rule',
-        'reminder_sent'
+        'recurring_until',
+        'timezone',
+        'status'
     ];
 
     protected $casts = [
-        'appointment_date' => 'date',
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
-        'is_recurring' => 'boolean',
-        'reminder_sent' => 'boolean',
+        'start_datetime' => 'datetime',
+        'end_datetime' => 'datetime',
+        'is_recurring' => 'boolean'
     ];
 
     public function user()
@@ -42,7 +40,14 @@ class Appointment extends Model
     public function clients()
     {
         return $this->belongsToMany(Client::class, 'clients_appointments')
-            ->withPivot('status', 'notes')
             ->withTimestamps();
+    }
+
+    /**
+     * Get all reminders for the appointment
+     */
+    public function reminders()
+    {
+        return $this->hasMany(ReminderDespatch::class);
     }
 }
