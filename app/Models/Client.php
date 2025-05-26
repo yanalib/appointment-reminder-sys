@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Client extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'first_name',
         'last_name',
@@ -15,9 +18,14 @@ class Client extends Model
         'reminder_preference'
     ];
 
+    /**
+     * Get all appointments for the client
+     */
     public function appointments()
     {
-        return $this->hasMany(Appointment::class);
+        return $this->belongsToMany(Appointment::class, 'clients_appointments')
+            ->withPivot('status', 'notes')
+            ->withTimestamps();
     }
 
     public function reminders()

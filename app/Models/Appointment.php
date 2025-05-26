@@ -16,7 +16,10 @@ class Appointment extends Model
         'start_time',
         'end_time',
         'user_id',
+        'notes',
         'status',
+        'is_recurring',
+        'recurrence_rule',
         'reminder_sent'
     ];
 
@@ -24,11 +27,22 @@ class Appointment extends Model
         'appointment_date' => 'date',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
+        'is_recurring' => 'boolean',
         'reminder_sent' => 'boolean',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get all clients for the appointment
+     */
+    public function clients()
+    {
+        return $this->belongsToMany(Client::class, 'clients_appointments')
+            ->withPivot('status', 'notes')
+            ->withTimestamps();
     }
 }

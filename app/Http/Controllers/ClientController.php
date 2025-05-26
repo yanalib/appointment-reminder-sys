@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Client;
 
 class ClientController extends Controller
 {
@@ -20,12 +21,20 @@ class ClientController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => 'required|email|unique:clients',
             'phone' => 'nullable|string',
-            'timezone' => 'required|string|max:255',
-            'reminder_preference' => 'required|string|in:email,sms',
+            'timezone' => 'nullable|string|max:255',
+            'reminder_preference' => 'nullable|string',
         ]); 
 
-        $clientData = $request->only(['first_name', 'last_name', 'email', 'phone', 'timezone', 'reminder_preference']);
-        $client = Client::create($clientData);
+        $client = Client::create(
+            [
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'timezone' => $request->timezone,
+                'reminder_preference' => $request->reminder_preference,
+            ]
+        );
         return response()->json($client, 201);
     }
 

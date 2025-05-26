@@ -4,7 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
-use App\Http\Controllers\AuthController;
+use App\Http\Controllers\{AuthController, AppointmentController, ClientController, ReminderDespatchController};
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
