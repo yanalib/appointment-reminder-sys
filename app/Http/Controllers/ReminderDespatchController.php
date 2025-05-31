@@ -4,40 +4,31 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\ReminderDespatch;
+use App\Models\Appointment;
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Validator;
+use App\Jobs\SendReminder;
 
 class ReminderDespatchController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reminders = ReminderDespatch::with(['appointment', 'client'])
-                                    ->orderBy('scheduled_for', 'desc')
-                                    ->paginate(10);
-            
+        $query = ReminderDespatch::with(['appointment']);
+
+        if ($request->has('status')) {
+            $query = $this->filter($query, $request->status);
+        }
+
+        $reminders = $query->get();                          
         return response()->json($reminders);
     }
 
-    public function scheduled()
+    public function filter($query, $status)
     {
-        $reminders = ReminderDespatch::with(['appointment', 'client'])
-            ->where('status', 'pending')
-            ->where('scheduled_for', '>=', now())
-            ->orderBy('scheduled_for', 'asc')
-            ->paginate(10);
-            
-        return response()->json($reminders);
-    }
-
-    public function sent()
-    {
-        $reminders = ReminderDespatch::with(['appointment', 'client'])
-            ->where('status', 'sent')
-            ->whereNotNull('sent_at')
-            ->orderBy('sent_at', 'desc')
-            ->paginate(10);
-            
-        return response()->json($reminders);
+        $query->where('status', $status)->orderBy('status', 'desc')->paginate(10);
+        return $query;                    
     }
 
     public function analytics()
@@ -46,9 +37,7 @@ class ReminderDespatchController extends Controller
         $totalReminders = ReminderDespatch::count();
         $sentReminders = ReminderDespatch::where('status', 'sent')->count();
         $failedReminders = ReminderDespatch::where('status', 'failed')->count();
-        $upcomingReminders = ReminderDespatch::where('status', 'scheduled')
-            ->where('scheduled_for', '>', now())
-            ->count();
+        $upcomingReminders = ReminderDespatch::where('status', 'scheduled')->where('scheduled_for', '>', now())->count();
 
         // Get the latest reminders for each status
         $latestSent = ReminderDespatch::with(['appointment', 'user'])
@@ -134,7 +123,6 @@ class ReminderDespatchController extends Controller
 
     public function retryFailedReminders(Request $request)
     {
-        // Get all failed reminders or specific ones if IDs are provided
         $query = ReminderDespatch::where('status', 'failed');
         
         if ($request->has('ids')) {
@@ -176,5 +164,108 @@ class ReminderDespatchController extends Controller
             'failed' => count($results['failed']),
             'details' => $results
         ]);
+    }
+
+    /**
+     * Store a newly created reminder despatch for all clients in an appointment.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'appointment_id' => 'required|exists:appointments,id',
+            'scheduled_for' => 'required_without:offset_minutes|date',
+            'offset_minutes' => 'required_without:scheduled_for|integer|min:1'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Get the appointment with its clients
+            $appointment = Appointment::with('clients')->findOrFail($request->appointment_id);
+
+            if ($appointment->clients->isEmpty()) {
+                return response()->json([
+                    'message' => 'No clients found for this appointment'
+                ], 404);
+            }
+
+            // Calculate scheduled_for if offset_minutes is provided
+            $scheduledFor = $request->scheduled_for;
+            if ($request->has('offset_minutes')) {
+                $scheduledFor = Carbon::parse($appointment->start_datetime)
+                    ->subMinutes($request->offset_minutes);
+            }
+
+            $createdReminders = [];
+            $failedReminders = [];
+
+            // Create a reminder for each client
+            foreach ($appointment->clients as $client) {
+                try {
+                    $reminder = ReminderDespatch::create([
+                        'appointment_id' => $request->appointment_id,
+                        'client_id' => $client->id,
+                        'user_id' => $request->user_id,
+                        'offset_minutes' => $request->offset_minutes,
+                        'scheduled_for' => $scheduledFor,
+                        'type' => $client->preferred_notification_method ?? 'email', // Use client's preference
+                        'status' => 'pending',
+                        'message_template' => 'default',
+                        'error_message' => null,
+                        'sent_at' => null
+                    ]);
+
+                    $reminder->load(['appointment', 'client']);
+                    
+                    // Dispatch the job to send the reminder
+                    // If scheduled_for is in the future, delay the job
+                    $delay = Carbon::parse($scheduledFor)->isAfter(now()) 
+                        ? Carbon::parse($scheduledFor) 
+                        : now();
+                    
+                    SendReminder::dispatch($reminder)
+                        ->delay($delay)
+                        ->onQueue('reminders');
+
+                    $createdReminders[] = $reminder;
+
+                } catch (\Exception $e) {
+                    $failedReminders[] = [
+                        'client_id' => $client->id,
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+
+            return response()->json([
+                'message' => 'Reminders created and queued for sending',
+                'data' => [
+                    'successful' => [
+                        'count' => count($createdReminders),
+                        'reminders' => $createdReminders,
+                        'scheduled_for' => $scheduledFor
+                    ],
+                    'failed' => [
+                        'count' => count($failedReminders),
+                        'details' => $failedReminders
+                    ]
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to create reminders',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

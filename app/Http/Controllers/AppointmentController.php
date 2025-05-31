@@ -203,7 +203,7 @@ class AppointmentController extends Controller
     {
         $appointment = Appointment::findOrFail($appointmentId);
         
-        $query = ReminderDespatch::where('appointment_id', $appointment->id);
+        $query = ReminderDespatch::where('appointment_id', $appointmentId);
 
         // Filter by status if provided
         if ($request->has('status')) {
@@ -218,10 +218,8 @@ class AppointmentController extends Controller
         }
  
         $reminders = $query->with(['user' => function($query) {
-                $query->select('id', 'first_name', 'last_name', 'email');
-            }])
-            ->orderBy($sortBy, $sortOrder)
-            ->paginate($request->per_page ?? 10);
+            $query->select('id', 'first_name', 'last_name', 'email');
+        }])->paginate($request->per_page ?? 10);
 
         return response()->json([
             'appointment' => $appointment->only([

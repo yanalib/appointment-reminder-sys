@@ -28,12 +28,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/appointments/{appointment}/reminders/simulate', [AppointmentController::class, 'simulateReminder']);
     Route::post('/appointments/{appointment}/reminders/send', [AppointmentController::class, 'sendReminder']);
     
-    // Admin only routes
-    Route::middleware('admin')->group(function () {
+    Route::middleware(['auth:sanctum', 'admin'])->group(function () {
         Route::get('/reminders', [ReminderDespatchController::class, 'index']);
-        Route::get('/reminders/scheduled', [ReminderDespatchController::class, 'scheduled']);
-        Route::get('/reminders/sent', [ReminderDespatchController::class, 'sent']);
+        Route::post('/reminders', [ReminderDespatchController::class, 'store']);
         Route::get('/reminders/analytics', [ReminderDespatchController::class, 'analytics']);
-        Route::post('/reminders/retry', [ReminderDespatchController::class, 'retryFailedReminders']);
     });
 });

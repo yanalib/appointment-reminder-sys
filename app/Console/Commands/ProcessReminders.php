@@ -1,6 +1,7 @@
 <?php
 //php artisan reminders:process
 //php artisan schedule:work 
+//php artisan queue:work --queue=reminders --tries=3 --backoff=30
 
 namespace App\Console\Commands;
 
@@ -33,7 +34,7 @@ class ProcessReminders extends Command
         $this->info('Starting to process reminders...');
 
         // Get all pending reminders that are due to be sent
-        $dueReminders = ReminderDespatch::with(['appointment', 'client'])
+        $dueReminders = ReminderDespatch::with(['appointment'])
             ->where('status', 'pending')
             ->where('scheduled_for', '<=', now())
             ->get();
