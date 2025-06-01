@@ -4,9 +4,19 @@ namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
+use App\Console\Commands\RetryFailedJobs;
 
 class Kernel extends ConsoleKernel
 {
+    /**
+     * The commands to be registered.
+     *
+     * @var array
+     */
+    protected $commands = [
+        RetryFailedJobs::class,
+    ];
+
     /**
      * Define the application's command schedule.
      */

@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Validator;
 use App\Jobs\SendReminder;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ReminderEmail;
 
 class ReminderDespatchController extends Controller
 {
@@ -123,13 +125,21 @@ class ReminderDespatchController extends Controller
 
     public function retryFailedReminders(Request $request)
     {
-        $query = ReminderDespatch::where('status', 'failed');
+        $query = ReminderDespatch::where('status', 'failed')
+            ->with(['appointment', 'appointment.clients', 'user']);
         
         if ($request->has('ids')) {
             $query->whereIn('id', $request->input('ids'));
         }
 
         $failedReminders = $query->get();
+        
+        if ($failedReminders->isEmpty()) {
+            return response()->json([
+                'message' => 'No failed reminders found',
+                'total_processed' => 0
+            ]);
+        }
         
         $results = [
             'success' => [],
@@ -138,20 +148,72 @@ class ReminderDespatchController extends Controller
 
         foreach ($failedReminders as $reminder) {
             try {
-                // Reset the reminder status and clear error message
-                $reminder->status = 'pending';
-                $reminder->error_message = null;
-                $reminder->retry_count = ($reminder->retry_count ?? 0) + 1;
-                $reminder->scheduled_for = now(); // Reschedule for immediate delivery
-                $reminder->save();
+                $appointment = $reminder->appointment;
+                $clients = $appointment->clients;
+                $userTimezone = $reminder->user->timezone ?? 'UTC';
+
+                // Convert times to user's timezone
+                $scheduledFor = Carbon::parse($reminder->scheduled_for)->setTimezone($userTimezone);
+                $appointmentStart = Carbon::parse($appointment->start_datetime)->setTimezone($userTimezone);
+                $appointmentEnd = Carbon::parse($appointment->end_datetime)->setTimezone($userTimezone);
+
+                // Reset the reminder status
+                $reminder->update([
+                    'status' => 'pending',
+                    'error_message' => null,
+                    'retry_count' => ($reminder->retry_count ?? 0) + 1,
+                    'scheduled_for' => now(),
+                    'sent_at' => null
+                ]);
+
+                // Send the reminder email to all clients
+                foreach ($clients as $client) {
+                    // Convert times to client's timezone
+                    $clientTimezone = $client->timezone ?? $userTimezone;
+                    $clientAppointmentStart = $appointmentStart->copy()->setTimezone($clientTimezone);
+                    $clientAppointmentEnd = $appointmentEnd->copy()->setTimezone($clientTimezone);
+
+                    // Update appointment times for this specific client's email
+                    $clientAppointment = clone $appointment;
+                    $clientAppointment->start_datetime = $clientAppointmentStart;
+                    $clientAppointment->end_datetime = $clientAppointmentEnd;
+
+                    Mail::to($client->email)->send(new ReminderEmail($clientAppointment, $client));
+                }
+
+                // Dispatch the reminder job
+                SendReminder::dispatch($reminder)->onQueue('reminders');
 
                 $results['success'][] = [
                     'id' => $reminder->id,
-                    'message' => 'Reminder rescheduled successfully'
+                    'appointment' => [
+                        'title' => $appointment->title,
+                        'start_datetime' => $appointmentStart->format('Y-m-d H:i:s T'),
+                        'end_datetime' => $appointmentEnd->format('Y-m-d H:i:s T'),
+                        'timezone' => $userTimezone
+                    ],
+                    'clients' => $clients->map(function($client) use ($appointmentStart, $appointmentEnd) {
+                        $clientTimezone = $client->timezone ?? 'UTC';
+                        return [
+                            'email' => $client->email,
+                            'name' => $client->first_name . ' ' . $client->last_name,
+                            'timezone' => $clientTimezone,
+                            'appointment_time' => [
+                                'start' => $appointmentStart->copy()->setTimezone($clientTimezone)->format('Y-m-d H:i:s T'),
+                                'end' => $appointmentEnd->copy()->setTimezone($clientTimezone)->format('Y-m-d H:i:s T')
+                            ]
+                        ];
+                    }),
+                    'message' => 'Reminder rescheduled and email sent successfully'
                 ];
             } catch (\Exception $e) {
                 $results['failed'][] = [
                     'id' => $reminder->id,
+                    'appointment' => $appointment ? [
+                        'title' => $appointment->title,
+                        'start_datetime' => isset($appointmentStart) ? $appointmentStart->format('Y-m-d H:i:s T') : null,
+                        'timezone' => $userTimezone ?? 'UTC'
+                    ] : null,
                     'message' => 'Failed to reschedule reminder: ' . $e->getMessage()
                 ];
             }

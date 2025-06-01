@@ -7,7 +7,7 @@ use Illuminate\Validation\ValidationException;
 use App\Http\Controllers\{AuthController, AppointmentController, ClientController, ReminderDespatchController};
 
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->name('login');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -22,6 +22,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/appointments/{appointment}/assign-clients', [AppointmentController::class, 'assignClients']);
     //View upcoming and past appointments - need type param e.g. ?type=upcoming or ?type=past
     Route::get('/appointments', [AppointmentController::class, 'index']);
+    Route::any('/appointments/{appointmentId}/status', [AppointmentController::class, 'changeStatus']);
     
     Route::get('/appointments/{appointment}/reminders', [AppointmentController::class, 'reminders']);
     Route::post('/appointments/{appointment}/reminders', [AppointmentController::class, 'scheduleReminder']);
